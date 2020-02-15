@@ -1,6 +1,6 @@
 import Button from '../../goods-action-button';
 import Icon from '../../goods-action-icon';
-import { mount } from '../../../test/utils';
+import { mount } from '../../../test';
 
 test('Button click event', () => {
   const wrapper = mount(Button);
@@ -18,7 +18,7 @@ test('Button render default slot', () => {
   const wrapper = mount({
     render(h) {
       return h(Button, null, ['Default Content']);
-    }
+    },
   });
 
   expect(wrapper).toMatchSnapshot();
@@ -28,7 +28,7 @@ test('Icon render default slot', () => {
   const wrapper = mount({
     render(h) {
       return h(Icon, null, ['Default Content']);
-    }
+    },
   });
 
   expect(wrapper).toMatchSnapshot();
@@ -40,10 +40,10 @@ test('Icon render icon slot', () => {
       return h(Icon, {
         scopedSlots: {
           default: () => 'Text',
-          icon: () => 'Custom Icon'
-        }
+          icon: () => 'Custom Icon',
+        },
       });
-    }
+    },
   });
 
   expect(wrapper).toMatchSnapshot();

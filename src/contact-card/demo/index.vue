@@ -8,26 +8,21 @@
         @click="showList = true"
       />
 
-      <van-popup
-        v-model="showList"
-        position="bottom"
-        :lazy-render="false"
-      >
+      <van-popup v-model="showList" position="bottom" :lazy-render="false">
         <van-contact-list
           v-model="chosenContactId"
           :list="list"
+          :default-tag-text="$t('defaultTagText')"
           @add="onAdd"
           @edit="onEdit"
           @select="onSelect"
         />
       </van-popup>
 
-      <van-popup
-        v-model="showEdit"
-        position="bottom"
-        :lazy-render="false"
-      >
+      <van-popup v-model="showEdit" position="bottom" :lazy-render="false">
         <van-contact-edit
+          show-set-default
+          :set-default-label="$t('defaultLabel')"
           :contact-info="editingContact"
           :is-edit="isEdit"
           @save="onSave"
@@ -51,11 +46,15 @@
 export default {
   i18n: {
     'zh-CN': {
-      name: '张三'
+      name: '张三',
+      defaultLabel: '设为默认联系人',
+      defaultTagText: '默认',
     },
     'en-US': {
-      name: 'John Snow'
-    }
+      name: 'John Snow',
+      defaultLabel: 'Set as the default contact',
+      defaultTagText: 'default',
+    },
   },
 
   data() {
@@ -65,7 +64,7 @@ export default {
       showList: false,
       showEdit: false,
       isEdit: false,
-      list: []
+      list: [],
     };
   },
 
@@ -74,7 +73,8 @@ export default {
       return {
         name: this.$t('name'),
         tel: '13000000000',
-        id: 0
+        id: 0,
+        isDefault: 1,
       };
     },
 
@@ -85,7 +85,7 @@ export default {
     currentContact() {
       const id = this.chosenContactId;
       return id !== null ? this.list.filter(item => item.id === id)[0] : {};
-    }
+    },
   },
 
   created() {
@@ -127,8 +127,8 @@ export default {
       if (this.chosenContactId === info.id) {
         this.chosenContactId = null;
       }
-    }
-  }
+    },
+  },
 };
 </script>
 

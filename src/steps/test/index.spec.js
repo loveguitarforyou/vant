@@ -1,4 +1,4 @@
-import { mount } from '../../../test/utils';
+import { mount } from '../../../test';
 import Steps from '..';
 import Step from '../../step';
 
@@ -22,8 +22,8 @@ test('icon slot', () => {
     `,
     components: {
       Steps,
-      Step
-    }
+      Step,
+    },
   });
   expect(wrapper).toMatchSnapshot();
 });

@@ -6,11 +6,19 @@ import SkuHeader from './components/SkuHeader';
 import SkuHeaderItem from './components/SkuHeaderItem';
 import SkuRow from './components/SkuRow';
 import SkuRowItem from './components/SkuRowItem';
+import SkuRowPropItem from './components/SkuRowPropItem';
 import SkuStepper from './components/SkuStepper';
 import SkuMessages from './components/SkuMessages';
 import SkuActions from './components/SkuActions';
 import { createNamespace, isDef } from '../utils';
-import { isAllSelected, isSkuChoosable, getSkuComb, getSelectedSkuValues } from './utils/skuHelper';
+import {
+  isAllSelected,
+  isSkuChoosable,
+  getSkuComb,
+  getSelectedSkuValues,
+  getSelectedPropValues,
+  getSelectedProperties,
+} from './utils/skuHelper';
 import { LIMIT_TYPE, UNSELECTED_SKU_VALUE_ID } from './constants';
 
 const namespace = createNamespace('sku');
@@ -28,7 +36,7 @@ export default createComponent({
     hideStock: Boolean,
     addCartText: String,
     stepperTitle: String,
-    getContainer: Function,
+    getContainer: [String, Function],
     hideQuotaText: Boolean,
     hideSelectedText: Boolean,
     resetStepperOnHide: Boolean,
@@ -37,17 +45,22 @@ export default createComponent({
     disableStepperInput: Boolean,
     safeAreaInsetBottom: Boolean,
     resetSelectedSkuOnHide: Boolean,
+    properties: Array,
     quota: {
       type: Number,
-      default: 0
+      default: 0,
     },
     quotaUsed: {
       type: Number,
-      default: 0
+      default: 0,
+    },
+    startSaleNum: {
+      type: Number,
+      default: 1,
     },
     initialSku: {
       type: Object,
-      default: () => ({})
+      default: () => ({}),
     },
     stockThreshold: {
       type: Number,
@@ -55,35 +68,36 @@ export default createComponent({
     },
     showSoldoutSku: {
       type: Boolean,
-      default: true
+      default: true,
     },
     showAddCartBtn: {
       type: Boolean,
-      default: true
+      default: true,
     },
     bodyOffsetTop: {
       type: Number,
-      default: 200
+      default: 200,
     },
     messageConfig: {
       type: Object,
       default: () => ({
         placeholderMap: {},
         uploadImg: () => Promise.resolve(),
-        uploadMaxSize: 5
-      })
+        uploadMaxSize: 5,
+      }),
     },
     customStepperConfig: {
       type: Object,
-      default: () => ({})
+      default: () => ({}),
     },
   },
 
   data() {
     return {
       selectedSku: {},
+      selectedProp: {},
       selectedNum: 1,
-      show: this.value
+      show: this.value,
     };
   },
 
@@ -94,7 +108,7 @@ export default createComponent({
         this.$emit('sku-close', {
           selectedSkuValues: this.selectedSkuValues,
           selectedNum: this.selectedNum,
-          selectedSkuComb: this.selectedSkuComb
+          selectedSkuComb: this.selectedSkuComb,
         });
 
         if (this.resetStepperOnHide) {
@@ -102,7 +116,7 @@ export default createComponent({
         }
 
         if (this.resetSelectedSkuOnHide) {
-          this.resetSelectedSku(this.skuTree);
+          this.resetSelectedSku();
         }
       }
     },
@@ -115,7 +129,7 @@ export default createComponent({
 
     initialSku() {
       this.resetStepper();
-      this.resetSelectedSku(this.skuTree);
+      this.resetSelectedSku();
     },
   },
 
@@ -124,8 +138,8 @@ export default createComponent({
       return [
         'van-sku-group-container',
         {
-          'van-sku-group-container--hide-soldout': !this.showSoldoutSku
-        }
+          'van-sku-group-container--hide-soldout': !this.showSoldoutSku,
+        },
       ];
     },
 
@@ -138,12 +152,22 @@ export default createComponent({
       const maxHeight = window.innerHeight - this.bodyOffsetTop;
 
       return {
-        maxHeight: maxHeight + 'px'
+        maxHeight: maxHeight + 'px',
       };
     },
 
     isSkuCombSelected() {
-      return isAllSelected(this.sku.tree, this.selectedSku);
+      // SKU 未选完
+      if (this.hasSku && !isAllSelected(this.skuTree, this.selectedSku)) {
+        return false;
+      }
+      // 属性未全选
+      if (
+        this.propList.some(it => (this.selectedProp[it.k_id] || []).length < 1)
+      ) {
+        return false;
+      }
+      return true;
     },
 
     isSkuEmpty() {
@@ -154,27 +178,50 @@ export default createComponent({
       return !this.sku.none_sku;
     },
 
+    hasSkuOrAttr() {
+      return this.hasSku || this.propList.length > 0;
+    },
+
     selectedSkuComb() {
-      if (!this.hasSku) {
-        return {
-          id: this.sku.collection_id,
-          price: Math.round(this.sku.price * 100),
-          stock_num: this.sku.stock_num
-        };
-      }
+      let skuComb = null;
       if (this.isSkuCombSelected) {
-        return getSkuComb(this.sku.list, this.selectedSku);
+        if (this.hasSku) {
+          skuComb = getSkuComb(this.sku.list, this.selectedSku);
+        } else {
+          skuComb = {
+            id: this.sku.collection_id,
+            price: Math.round(this.sku.price * 100),
+            stock_num: this.sku.stock_num,
+          };
+        }
+        if (skuComb) {
+          skuComb.properties = getSelectedProperties(
+            this.propList,
+            this.selectedProp
+          );
+          skuComb.property_price = this.selectedPropValues.reduce(
+            (acc, cur) => acc + (cur.price || 0),
+            0
+          );
+        }
       }
-      return null;
+      return skuComb;
     },
 
     selectedSkuValues() {
       return getSelectedSkuValues(this.skuTree, this.selectedSku);
     },
 
+    selectedPropValues() {
+      return getSelectedPropValues(this.propList, this.selectedProp);
+    },
+
     price() {
       if (this.selectedSkuComb) {
-        return (this.selectedSkuComb.price / 100).toFixed(2);
+        return (
+          (this.selectedSkuComb.price + this.selectedSkuComb.property_price) /
+          100
+        ).toFixed(2);
       }
       // sku.price是一个格式化好的价格区间
       return this.sku.price;
@@ -182,13 +229,21 @@ export default createComponent({
 
     originPrice() {
       if (this.selectedSkuComb && this.selectedSkuComb.origin_price) {
-        return (this.selectedSkuComb.origin_price / 100).toFixed(2);
+        return (
+          (this.selectedSkuComb.origin_price +
+            this.selectedSkuComb.property_price) /
+          100
+        ).toFixed(2);
       }
       return this.sku.origin_price;
     },
 
     skuTree() {
       return this.sku.tree || [];
+    },
+
+    propList() {
+      return this.properties || [];
     },
 
     imageList() {
@@ -229,41 +284,34 @@ export default createComponent({
 
       return [
         `${t('stock')} `,
-        <span class={bem('stock-num', { highlight: this.stock < this.stockThreshold })}>
+        <span
+          class={bem('stock-num', {
+            highlight: this.stock < this.stockThreshold,
+          })}
+        >
           {this.stock}
         </span>,
-        ` ${t('stockUnit')}`
+        ` ${t('stockUnit')}`,
       ];
-    },
-
-    quotaText() {
-      const { quotaText, hideQuotaText } = this.customStepperConfig;
-
-      if (hideQuotaText) return '';
-
-      let text = '';
-
-      if (quotaText) {
-        text = quotaText;
-      } else if (this.quota > 0) {
-        text = t('quotaLimit', this.quota);
-      }
-
-      return text;
     },
 
     selectedText() {
       if (this.selectedSkuComb) {
-        return `${t('selected')} ${this.selectedSkuValues.map(item => item.name).join('；')}`;
+        const values = this.selectedSkuValues.concat(this.selectedPropValues);
+        return `${t('selected')} ${values.map(item => item.name).join('；')}`;
       }
 
-      const unselected = this.skuTree
+      const unselectedSku = this.skuTree
         .filter(item => this.selectedSku[item.k_s] === UNSELECTED_SKU_VALUE_ID)
-        .map(item => item.k)
-        .join('；');
+        .map(item => item.k);
+      const unselectedProp = this.propList
+        .filter(item => (this.selectedProp[item.k_id] || []).length < 1)
+        .map(item => item.k);
 
-      return `${t('select')} ${unselected}`;
-    }
+      return `${t('select')} ${unselectedSku
+        .concat(unselectedProp)
+        .join('；')}`;
+    },
   },
 
   created() {
@@ -271,14 +319,16 @@ export default createComponent({
     this.skuEventBus = skuEventBus;
 
     skuEventBus.$on('sku:select', this.onSelect);
+    skuEventBus.$on('sku:propSelect', this.onPropSelect);
     skuEventBus.$on('sku:numChange', this.onNumChange);
     skuEventBus.$on('sku:previewImage', this.onPreviewImage);
     skuEventBus.$on('sku:overLimit', this.onOverLimit);
+    skuEventBus.$on('sku:stepperState', this.onStepperState);
     skuEventBus.$on('sku:addCart', this.onAddCart);
     skuEventBus.$on('sku:buy', this.onBuy);
 
     this.resetStepper();
-    this.resetSelectedSku(this.skuTree);
+    this.resetSelectedSku();
 
     // 组件初始化后的钩子，抛出skuEventBus
     this.$emit('after-sku-create', skuEventBus);
@@ -288,25 +338,30 @@ export default createComponent({
     resetStepper() {
       const { skuStepper } = this.$refs;
       const { selectedNum } = this.initialSku;
-      const num = isDef(selectedNum) ? selectedNum : 1;
+      const num = isDef(selectedNum) ? selectedNum : this.startSaleNum;
+      // 用来缓存不合法的情况
+      this.stepperError = null;
 
       if (skuStepper) {
         skuStepper.setCurrentNum(num);
       } else {
+        // 当首次加载（skuStepper 为空）时，传入数量如果不合法，可能会存在问题
         this.selectedNum = num;
       }
     },
 
-    resetSelectedSku(skuTree) {
+    // @exposed-api
+    resetSelectedSku() {
       this.selectedSku = {};
 
       // 重置 selectedSku
-      skuTree.forEach(item => {
-        this.selectedSku[item.k_s] = this.initialSku[item.k_s] || UNSELECTED_SKU_VALUE_ID;
+      this.skuTree.forEach(item => {
+        this.selectedSku[item.k_s] =
+          this.initialSku[item.k_s] || UNSELECTED_SKU_VALUE_ID;
       });
 
       // 只有一个 sku 规格值时默认选中
-      skuTree.forEach(item => {
+      this.skuTree.forEach(item => {
         const key = item.k_s;
         const valueId = item.v[0].id;
         if (
@@ -328,6 +383,27 @@ export default createComponent({
           });
         });
       }
+
+      // 重置商品属性
+      this.selectedProp = {};
+      const { selectedProp = {} } = this.initialSku;
+      // 只有一个属性值时，默认选中，且选中外部传入信息
+      this.propList.forEach(item => {
+        if (item.v && item.v.length === 1) {
+          this.selectedProp[item.k_id] = [item.v[0].id];
+        } else if (selectedProp[item.k_id]) {
+          this.selectedProp[item.k_id] = selectedProp[item.k_id];
+        }
+      });
+
+      const propValues = this.selectedPropValues;
+      if (propValues.length > 0) {
+        this.$emit('sku-prop-selected', {
+          propValue: propValues[propValues.length - 1],
+          selectedProp: this.selectedProp,
+          selectedSkuComb: this.selectedSkuComb,
+        });
+      }
     },
 
     getSkuMessages() {
@@ -335,11 +411,15 @@ export default createComponent({
     },
 
     getSkuCartMessages() {
-      return this.$refs.skuMessages ? this.$refs.skuMessages.getCartMessages() : {};
+      return this.$refs.skuMessages
+        ? this.$refs.skuMessages.getCartMessages()
+        : {};
     },
 
     validateSkuMessages() {
-      return this.$refs.skuMessages ? this.$refs.skuMessages.validateMessages() : '';
+      return this.$refs.skuMessages
+        ? this.$refs.skuMessages.validateMessages()
+        : '';
     },
 
     validateSku() {
@@ -364,13 +444,37 @@ export default createComponent({
       // 点击已选中的sku时则取消选中
       this.selectedSku =
         this.selectedSku[skuValue.skuKeyStr] === skuValue.id
-          ? { ...this.selectedSku, [skuValue.skuKeyStr]: UNSELECTED_SKU_VALUE_ID }
+          ? {
+            ...this.selectedSku,
+            [skuValue.skuKeyStr]: UNSELECTED_SKU_VALUE_ID,
+          }
           : { ...this.selectedSku, [skuValue.skuKeyStr]: skuValue.id };
 
       this.$emit('sku-selected', {
         skuValue,
         selectedSku: this.selectedSku,
-        selectedSkuComb: this.selectedSkuComb
+        selectedSkuComb: this.selectedSkuComb,
+      });
+    },
+
+    onPropSelect(propValue) {
+      const arr = this.selectedProp[propValue.skuKeyStr] || [];
+      const pos = arr.indexOf(propValue.id);
+      if (pos > -1) {
+        arr.splice(pos, 1);
+      } else if (propValue.multiple) {
+        arr.push(propValue.id);
+      } else {
+        arr.splice(0, 1, propValue.id);
+      }
+      this.selectedProp = {
+        ...this.selectedProp,
+        [propValue.skuKeyStr]: arr,
+      };
+      this.$emit('sku-prop-selected', {
+        propValue,
+        selectedProp: this.selectedProp,
+        selectedSkuComb: this.selectedSkuComb,
       });
     },
 
@@ -384,7 +488,7 @@ export default createComponent({
       const params = {
         index,
         imageList: this.imageList,
-        indexImage
+        indexImage,
       };
 
       this.$emit('open-preview', params);
@@ -395,7 +499,7 @@ export default createComponent({
         closeOnPopstate: true,
         onClose: () => {
           this.$emit('close-preview', params);
-        }
+        },
       });
     },
 
@@ -409,15 +513,32 @@ export default createComponent({
       }
 
       if (action === 'minus') {
-        Toast(t('minusTip'));
+        if (this.startSaleNum > 1) {
+          Toast(t('minusStartTip', this.startSaleNum));
+        } else {
+          Toast(t('minusTip'));
+        }
       } else if (action === 'plus') {
         if (limitType === QUOTA_LIMIT) {
-          let msg = t('quotaLimit', quota);
-          if (quotaUsed > 0) msg += `，${t('quotaCount', quotaUsed)}`;
-          Toast(msg);
+          if (quotaUsed > 0) {
+            Toast(t('quotaUsedTip', quota, quotaUsed));
+          } else {
+            Toast(t('quotaTip', quota));
+          }
         } else {
           Toast(t('soldout'));
         }
+      }
+    },
+
+    onStepperState(data) {
+      if (data.valid) {
+        this.stepperError = null;
+      } else {
+        this.stepperError = {
+          ...data,
+          action: 'plus',
+        };
       }
     },
 
@@ -430,6 +551,10 @@ export default createComponent({
     },
 
     onBuyOrAddCart(type) {
+      // 有信息表示该sku根本不符合购买条件
+      if (this.stepperError) {
+        return this.onOverLimit(this.stepperError);
+      }
       const error = this.validateSku();
       if (error) {
         Toast(error);
@@ -438,15 +563,16 @@ export default createComponent({
       }
     },
 
+    // @exposed-api
     getSkuData() {
       return {
         goodsId: this.goodsId,
         selectedNum: this.selectedNum,
         selectedSkuComb: this.selectedSkuComb,
         messages: this.getSkuMessages(),
-        cartMessages: this.getSkuCartMessages()
+        cartMessages: this.getSkuCartMessages(),
       };
-    }
+    },
   },
 
   render() {
@@ -461,10 +587,10 @@ export default createComponent({
       originPrice,
       skuEventBus,
       selectedSku,
+      selectedProp,
       selectedNum,
       stepperTitle,
-      hideQuotaText,
-      selectedSkuComb
+      selectedSkuComb,
     } = this;
 
     const slotsProps = {
@@ -473,31 +599,38 @@ export default createComponent({
       selectedNum,
       skuEventBus,
       selectedSku,
-      selectedSkuComb
+      selectedSkuComb,
     };
     const slots = name => this.slots(name, slotsProps);
 
     const Header = slots('sku-header') || (
-      <SkuHeader sku={sku} goods={goods} skuEventBus={skuEventBus} selectedSku={selectedSku}>
+      <SkuHeader
+        sku={sku}
+        goods={goods}
+        skuEventBus={skuEventBus}
+        selectedSku={selectedSku}
+      >
         {slots('sku-header-price') || (
           <div class="van-sku__goods-price">
             <span class="van-sku__price-symbol">￥</span>
             <span class="van-sku__price-num">{price}</span>
-            {this.priceTag && <span class="van-sku__price-tag">{this.priceTag}</span>}
+            {this.priceTag && (
+              <span class="van-sku__price-tag">{this.priceTag}</span>
+            )}
           </div>
         )}
-        {slots('sku-header-origin-price') || (
-          originPrice && (
-            <SkuHeaderItem>{t('originPrice')} ￥{originPrice}</SkuHeaderItem>
-          )
-        )}
+        {slots('sku-header-origin-price') ||
+          (originPrice && (
+            <SkuHeaderItem>
+              {t('originPrice')} ￥{originPrice}
+            </SkuHeaderItem>
+          ))}
         {!this.hideStock && (
           <SkuHeaderItem>
             <span class="van-sku__stock">{this.stockText}</span>
-            {!hideQuotaText && this.quotaText && <span class="van-sku__quota">({this.quotaText})</span>}
           </SkuHeaderItem>
         )}
-        {this.hasSku && !this.hideSelectedText && (
+        {this.hasSkuOrAttr && !this.hideSelectedText && (
           <SkuHeaderItem>{this.selectedText}</SkuHeaderItem>
         )}
         {slots('sku-header-extra')}
@@ -506,7 +639,7 @@ export default createComponent({
 
     const Group =
       slots('sku-group') ||
-      (this.hasSku && (
+      (this.hasSkuOrAttr && (
         <div class={this.skuGroupClass}>
           {this.skuTree.map(skuTreeItem => (
             <SkuRow skuRow={skuTreeItem}>
@@ -521,6 +654,19 @@ export default createComponent({
               ))}
             </SkuRow>
           ))}
+          {this.propList.map(skuTreeItem => (
+            <SkuRow skuRow={skuTreeItem}>
+              {skuTreeItem.v.map(skuValue => (
+                <SkuRowPropItem
+                  skuValue={skuValue}
+                  skuKeyStr={skuTreeItem.k_id + ''}
+                  selectedProp={selectedProp}
+                  skuEventBus={skuEventBus}
+                  multiple={skuTreeItem.is_multiple}
+                />
+              ))}
+            </SkuRow>
+          ))}
         </div>
       ));
 
@@ -530,6 +676,7 @@ export default createComponent({
         stock={this.stock}
         quota={this.quota}
         quotaUsed={this.quotaUsed}
+        startSaleNum={this.startSaleNum}
         skuEventBus={skuEventBus}
         selectedNum={selectedNum}
         selectedSku={selectedSku}
@@ -537,6 +684,7 @@ export default createComponent({
         skuStockNum={sku.stock_num}
         disableStepperInput={this.disableStepperInput}
         customStepperConfig={this.customStepperConfig}
+        hideQuotaText={this.hideQuotaText}
         onChange={event => {
           this.$emit('stepper-change', event);
         }}
@@ -580,8 +728,9 @@ export default createComponent({
           {Stepper}
           {Messages}
         </div>
+        {slots('sku-actions-top')}
         {Actions}
       </Popup>
     );
-  }
+  },
 });

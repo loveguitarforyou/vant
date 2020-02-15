@@ -39,13 +39,21 @@
       }
     }
 
-    &--clickable:active {
-      background-color: @grid-item-content-active-color;
+    &--clickable {
+      cursor: pointer;
+
+      &:active {
+        background-color: @grid-item-content-active-color;
+      }
     }
   }
 
   &__icon {
     font-size: @grid-item-icon-size;
+  }
+
+  &__icon-wrapper {
+    position: relative;
   }
 
   &__text {

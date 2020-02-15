@@ -1,6 +1,12 @@
+// Utils
 import { createNamespace, addUnit } from '../utils';
 import { preventDefault } from '../utils/dom/event';
+
+// Mixins
 import { TouchMixin } from '../mixins/touch';
+import { FieldMixin } from '../mixins/field';
+
+// Components
 import Icon from '../icon';
 
 const [createComponent, bem] = createNamespace('rate');
@@ -18,46 +24,37 @@ function getRateStatus(value, index, allowHalf) {
 }
 
 export default createComponent({
-  mixins: [TouchMixin],
+  mixins: [TouchMixin, FieldMixin],
 
   props: {
     size: [Number, String],
+    color: String,
     gutter: [Number, String],
     readonly: Boolean,
     disabled: Boolean,
     allowHalf: Boolean,
+    voidColor: String,
+    disabledColor: String,
     value: {
       type: Number,
-      default: 0
+      default: 0,
     },
     icon: {
       type: String,
-      default: 'star'
+      default: 'star',
     },
     voidIcon: {
       type: String,
-      default: 'star-o'
-    },
-    color: {
-      type: String,
-      default: '#ffd21e'
-    },
-    voidColor: {
-      type: String,
-      default: '#c7c7c7'
-    },
-    disabledColor: {
-      type: String,
-      default: '#bdbdbd'
+      default: 'star-o',
     },
     count: {
-      type: Number,
-      default: 5
+      type: [Number, String],
+      default: 5,
     },
     touchable: {
       type: Boolean,
-      default: true
-    }
+      default: true,
+    },
   },
 
   computed: {
@@ -76,7 +73,11 @@ export default createComponent({
 
     gutterWithUnit() {
       return addUnit(this.gutter);
-    }
+    },
+  },
+
+  mounted() {
+    this.bindTouchEvent(this.$el);
   },
 
   methods: {
@@ -136,14 +137,22 @@ export default createComponent({
       return this.allowHalf ? 0.5 : 1;
     },
 
-    renderStar(status, index) {
-      const { icon, color, count, voidIcon, disabled, voidColor, disabledColor } = this;
+    genStar(status, index) {
+      const {
+        icon,
+        color,
+        count,
+        voidIcon,
+        disabled,
+        voidColor,
+        disabledColor,
+      } = this;
       const score = index + 1;
       const isFull = status === 'full';
       const isVoid = status === 'void';
 
       let style;
-      if (this.gutterWithUnit && score !== count) {
+      if (this.gutterWithUnit && score !== +count) {
         style = { paddingRight: this.gutterWithUnit };
       }
 
@@ -163,7 +172,7 @@ export default createComponent({
           <Icon
             size={this.sizeWithUnit}
             name={isFull ? icon : voidIcon}
-            class={bem('icon')}
+            class={bem('icon', { disabled, full: isFull })}
             data-score={score}
             color={disabled ? disabledColor : isFull ? color : voidColor}
             onClick={() => {
@@ -174,7 +183,7 @@ export default createComponent({
             <Icon
               size={this.sizeWithUnit}
               name={isVoid ? voidIcon : icon}
-              class={bem('icon', 'half')}
+              class={bem('icon', ['half', { disabled, full: !isVoid }])}
               data-score={score - 0.5}
               color={disabled ? disabledColor : isVoid ? voidColor : color}
               onClick={() => {
@@ -184,20 +193,21 @@ export default createComponent({
           )}
         </div>
       );
-    }
+    },
   },
 
   render() {
     return (
       <div
-        class={bem()}
+        class={bem({
+          readonly: this.readonly,
+          disabled: this.disabled,
+        })}
         tabindex="0"
         role="radiogroup"
-        onTouchstart={this.onTouchStart}
-        onTouchmove={this.onTouchMove}
       >
-        {this.list.map((status, index) => this.renderStar(status, index))}
+        {this.list.map((status, index) => this.genStar(status, index))}
       </div>
     );
-  }
+  },
 });
